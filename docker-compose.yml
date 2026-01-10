@@ -161,6 +161,7 @@ services:
       - ./scripts:/app/scripts
       - ./notebooks:/app/notebooks
     environment:
+      AM_I_IN_A_DOCKER_CONTAINER: "true"
       DATABASE_URL: "postgresql://admin:secret@postgres:5432/opinion_intel_db"
       OLLAMA_HOST: "http://ollama:11434"
       FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY}
