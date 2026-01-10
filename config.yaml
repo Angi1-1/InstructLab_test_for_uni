@@ -450,7 +450,7 @@ train:
   #   - simple
   #   - full
   #   - accelerated
-  pipeline: full
+  pipeline: accelerated
   # Number of samples the model should see before saving a checkpoint.
   # Default: 250000
   save_samples: 250000
