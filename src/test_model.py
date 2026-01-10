@@ -29,39 +29,43 @@ tokenizer = get_chat_template(
 
 # 4. El Prompt de Prueba (Algo nuevo)
 # Una reseña ficticia sobre unos auriculares
+# 3. El Prompt de Prueba
 input_text = """
-Compré estos auriculares Sony hace una semana. La cancelación de ruido es brutal, te aísla de todo. 
-El sonido es muy nítido, especialmente los bajos. 
-Sin embargo, me molestó mucho que la batería dura menos de lo que prometen en la caja. 
-Además, al llevarlos puestos más de dos horas, me empiezan a doler las orejas por la presión.
+He comprado este monitor para gaming. La tasa de refresco de 144hz es increíble. 
+Los colores se ven vivos. Sin embargo, tiene un píxel muerto que me molesta. 
+Además, la peana es demasiado grande.
 
-Extrae los puntos positivos y negativos en JSON estricto.
+Extrae lo bueno y lo malo en JSON.
 """
 
-# Formateamos el mensaje como chat
 messages = [
-    {"role": "system", "content": "I am an advanced AI language model designed to assist you with a wide range of tasks..."}, # Mismo system prompt
+    {"role": "system", "content": "You are a helpful assistant that extracts information into JSON."},
     {"role": "user", "content": input_text},
 ]
 
-inputs = tokenizer.apply_chat_template(
+# --- CAMBIO IMPORTANTE AQUÍ ---
+# 1. Convertimos a texto plano con el formato correcto primero
+text_prompt = tokenizer.apply_chat_template(
     messages,
-    tokenize = True,
-    add_generation_prompt = True, # Importante: Añade el token de inicio de asistente
-    return_tensors = "pt",
-).to("cuda")
-
-# 5. Generar Respuesta
-print("🤖 Generando respuesta...")
-outputs = model.generate(
-    input_ids = inputs,
-    max_new_tokens = 512,
-    use_cache = True,
-    temperature = 0.1, # Baja temperatura para que sea preciso con el JSON
+    tokenize = False,
+    add_generation_prompt = True
 )
 
-# 6. Decodificar (Solo la parte nueva)
+# 2. Tokenizamos el texto generando explícitamente la máscara de atención
+inputs = tokenizer(text_prompt, return_tensors="pt").to("cuda")
+
+# 3. Generar pasando input_ids Y attention_mask
+print("🤖 Generando respuesta...")
+outputs = model.generate(
+    input_ids = inputs.input_ids,
+    attention_mask = inputs.attention_mask, # <--- ESTO FALTABA
+    max_new_tokens = 512,
+    use_cache = True,
+    temperature = 0.1,
+    pad_token_id = tokenizer.eos_token_id # Aseguramos que sepa cuál es el fin
+)
+
 decoded = tokenizer.batch_decode(outputs)
-# Limpiamos un poco el output para ver solo la respuesta
-print("\n=== RESPUESTA DEL MODELO ===")
+# Limpiamos para ver solo lo nuevo
+print("\n=== RESPUESTA ===")
 print(decoded[0].split("<|im_start|>assistant")[-1].replace("<|im_end|>", ""))
