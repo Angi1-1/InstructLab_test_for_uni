@@ -332,7 +332,8 @@ train:
   # Additional arguments to pass to the training script. These arguments are passed
   # as key-value pairs to the training script.
   # Default: {}
-  additional_args: {}
+  additional_args:
+    accelerate_full_state_at_epoch: false
   # Save a checkpoint at the end of each epoch.
   # Default: True
   checkpoint_at_epoch: true
