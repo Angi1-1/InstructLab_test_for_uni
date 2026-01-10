@@ -1,0 +1,19 @@
+# Ingesta & API
+firecrawl-py
+python-dotenv
+requests
+
+# Data & Database
+pandas
+psycopg2-binary
+pgvector
+sqlalchemy
+
+# NLP & AI (Local)
+spacy
+sentence-transformers
+ollama
+
+# Utils
+tqdm
+pyyaml

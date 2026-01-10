@@ -1,0 +1,176 @@
+services:
+  # ---------------------------------------------------------------------------
+  # UTILIDAD: Permisos
+  # ---------------------------------------------------------------------------
+  fix-perms:
+    image: alpine:3
+    container_name: intel_fix_perms
+    command: sh -c "chown -R 5050:5050 /var/lib/pgadmin && chown -R 1000:1000 /var/lib/postgresql/data"
+    user: root
+    volumes:
+      - ./data/pgadmin:/var/lib/pgadmin
+      - ./data/postgres:/var/lib/postgresql/data
+    network_mode: none
+
+  # ---------------------------------------------------------------------------
+  # PROXY: Traefik
+  # ---------------------------------------------------------------------------
+  traefik:
+    image: traefik:v2.11
+    container_name: intel_traefik
+    restart: unless-stopped
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - intel-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.localhost`)"
+
+  # ---------------------------------------------------------------------------
+  # CORE DATA: Postgres + Vector
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: intel_postgres
+    restart: unless-stopped
+    shm_size: 4gb
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_DB: ${POSTGRES_DB:-opinion_intel_db}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      # Script para activar vector si no existe
+      - ./init-db:/docker-entrypoint-initdb.d
+    networks:
+      - intel-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      fix-perms:
+        condition: service_completed_successfully
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: intel_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@linux.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-secret}
+    volumes:
+      - ./data/pgadmin:/var/lib/pgadmin
+    networks:
+      - intel-net
+    depends_on:
+      - postgres
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pgadmin.rule=Host(`pgadmin.localhost`)"
+
+  # ---------------------------------------------------------------------------
+  # CACHE & BROKER: Redis
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: intel_redis
+    restart: unless-stopped
+    volumes:
+      - ./data/redis:/data
+    networks:
+      - intel-net
+
+  # ---------------------------------------------------------------------------
+  # IA ENGINE: Ollama
+  # ---------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: intel_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./data/ollama:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - intel-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ollama.rule=Host(`ollama.localhost`)"
+      - "traefik.http.services.ollama.loadbalancer.server.port=11434"
+
+  # ---------------------------------------------------------------------------
+  # BUSINESS INTELLIGENCE: Apache Superset
+  # ---------------------------------------------------------------------------
+  superset:
+    image: apache/superset:latest
+    container_name: intel_superset
+    restart: unless-stopped
+    environment:
+      SUPERSET_SECRET_KEY: "tu_secreto_super_seguro_generado_con_openssl"
+      SQLALCHEMY_DATABASE_URI: "postgresql://admin:secret@postgres:5432/opinion_intel_db"
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+      TALISMAN_ENABLED: "False" # Solo para dev local
+    ports:
+      - "8088:8088"
+    networks:
+      - intel-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.superset.rule=Host(`bi.localhost`)"
+      - "traefik.http.routers.superset.entrypoints=web"
+      - "traefik.http.services.superset.loadbalancer.server.port=8088"
+    # Nota: Superset requiere un init manual la primera vez (ver abajo)
+
+  # ---------------------------------------------------------------------------
+  # WORKER: Python Scraper + Firecrawl + InstructLab Client
+  # ---------------------------------------------------------------------------
+  scraper-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.scraper # Tu Dockerfile de Python
+    container_name: intel_scraper
+    # Mantenemos el contenedor vivo para ejecutar tareas
+    command: tail -f /dev/null
+    volumes:
+      - ./scripts:/app/scripts
+      - ./notebooks:/app/notebooks
+    environment:
+      DATABASE_URL: "postgresql://admin:secret@postgres:5432/opinion_intel_db"
+      OLLAMA_HOST: "http://ollama:11434"
+      FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY}
+    networks:
+      - intel-net
+    deploy:
+      resources:
+        limits:
+          memory: 4G # Dale espacio para cargar Spacy/Embeddings
+
+networks:
+  intel-net:
+    driver: bridge

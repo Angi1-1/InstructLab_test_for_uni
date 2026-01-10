@@ -1,0 +1,25 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 1. Instalar dependencias del sistema (necesarias para psycopg2 y compilación básica)
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libpq-dev \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. Instalar dependencias Python
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 3. Descargar modelo de Spacy (Requisito académico NLP)
+# Usamos el modelo 'large' (lg) para vectores de mayor calidad
+RUN python -m spacy download es_core_news_lg
+
+# 4. Copiar el resto del código
+COPY . .
+
+# 5. Mantener el contenedor vivo para ejecutar comandos bajo demanda
+CMD ["tail", "-f", "/dev/null"]
