@@ -4,6 +4,12 @@ from trl import SFTTrainer
 from transformers import TrainingArguments
 from unsloth.chat_templates import get_chat_template
 from datasets import load_dataset
+from unsloth import tokenizer_utils
+
+# --- HACK (El parche obligatorio para Granite) ---
+def bypass_fix_chat_template(tokenizer):
+    return tokenizer.chat_template
+tokenizer_utils.fix_chat_template = bypass_fix_chat_template
 
 # --- CONFIGURACIÓN ---
 input_file = "data/synthetic/final_dataset/train_gen.jsonl" # Tu archivo original limpio

@@ -1,6 +1,12 @@
 from unsloth import FastLanguageModel
 from unsloth.chat_templates import get_chat_template
+from unsloth import tokenizer_utils
 import torch
+
+# --- HACK (El parche obligatorio para Granite) ---
+def bypass_fix_chat_template(tokenizer):
+    return tokenizer.chat_template
+tokenizer_utils.fix_chat_template = bypass_fix_chat_template
 
 # 1. Cargar el modelo entrenado (Base + Tus Adaptadores)
 # Nota: 'lora_model' es la carpeta que acabas de crear
