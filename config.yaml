@@ -360,7 +360,7 @@ train:
   #   - mps
   #   - cuda
   #   - hpu
-#  device: cuda
+  device: cuda
   # Whether or not we should disable the use of flash-attention during training.
   # This is useful when using older GPUs.
   # Default: False
